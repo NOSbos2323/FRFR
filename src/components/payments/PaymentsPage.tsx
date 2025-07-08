@@ -370,147 +370,248 @@ const PaymentsPage = () => {
         let importedActivities = 0;
         const errors = [];
 
-        // Import members with comprehensive data cleaning
+        // Import members with enhanced error handling and verification
         const memberService = await import("@/services/memberService");
 
-        for (let i = 0; i < members.length; i++) {
-          try {
-            const member = members[i];
-            if (!member || typeof member !== "object") {
-              errors.push(`عضو غير صحيح في الفهرس ${i}`);
-              continue;
-            }
-
-            if (
-              !member.name ||
-              typeof member.name !== "string" ||
-              member.name.trim() === ""
-            ) {
-              errors.push(`عضو بدون اسم في الفهرس ${i}`);
-              continue;
-            }
-
-            const cleanMember = {
-              id: member.id || `imported_member_${Date.now()}_${i}`,
-              name: String(member.name).trim(),
-              membershipStatus: ["active", "expired", "pending"].includes(
-                member.membershipStatus,
-              )
-                ? member.membershipStatus
-                : "pending",
-              lastAttendance:
-                member.lastAttendance || new Date().toISOString().split("T")[0],
-              imageUrl: member.imageUrl || member.profileImage || "",
-              phoneNumber: member.phoneNumber || member.phone || "",
-              email: member.email || "",
-              membershipType: member.membershipType || "",
-              membershipStartDate: member.membershipStartDate || "",
-              membershipEndDate: member.membershipEndDate || "",
-              subscriptionType: member.subscriptionType,
-              sessionsRemaining: Math.max(
-                0,
-                Number(member.sessionsRemaining) || 0,
-              ),
-              subscriptionPrice: Math.max(
-                0,
-                Number(member.subscriptionPrice) || 0,
-              ),
-              paymentStatus: ["paid", "unpaid", "partial"].includes(
-                member.paymentStatus,
-              )
-                ? member.paymentStatus
-                : "unpaid",
-              note: member.note || "",
-            };
-
-            // Use the new addOrUpdateMemberWithId function
-            await memberService.addOrUpdateMemberWithId(cleanMember);
-            importedMembers++;
-          } catch (error) {
-            errors.push(`خطأ في استيراد عضو ${i}: ${error}`);
-          }
+        // Process members in smaller batches to avoid overwhelming the database
+        const BATCH_SIZE = 10;
+        const memberBatches = [];
+        for (let i = 0; i < members.length; i += BATCH_SIZE) {
+          memberBatches.push(members.slice(i, i + BATCH_SIZE));
         }
 
-        // Import payments with comprehensive data cleaning
+        for (const batch of memberBatches) {
+          const batchPromises = [];
+
+          for (let i = 0; i < batch.length; i++) {
+            try {
+              const member = batch[i];
+              if (!member || typeof member !== "object") {
+                errors.push(`عضو غير صحيح في المجموعة`);
+                continue;
+              }
+
+              if (
+                !member.name ||
+                typeof member.name !== "string" ||
+                member.name.trim() === ""
+              ) {
+                errors.push(`عضو بدون اسم`);
+                continue;
+              }
+
+              const cleanMember = {
+                id:
+                  member.id ||
+                  `imported_member_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                name: String(member.name).trim(),
+                membershipStatus: ["active", "expired", "pending"].includes(
+                  member.membershipStatus,
+                )
+                  ? member.membershipStatus
+                  : "pending",
+                lastAttendance:
+                  member.lastAttendance ||
+                  new Date().toISOString().split("T")[0],
+                imageUrl: member.imageUrl || member.profileImage || "",
+                phoneNumber: member.phoneNumber || member.phone || "",
+                email: member.email || "",
+                membershipType: member.membershipType || "",
+                membershipStartDate: member.membershipStartDate || "",
+                membershipEndDate: member.membershipEndDate || "",
+                subscriptionType: member.subscriptionType,
+                sessionsRemaining: Math.max(
+                  0,
+                  Number(member.sessionsRemaining) || 0,
+                ),
+                subscriptionPrice: Math.max(
+                  0,
+                  Number(member.subscriptionPrice) || 0,
+                ),
+                paymentStatus: ["paid", "unpaid", "partial"].includes(
+                  member.paymentStatus,
+                )
+                  ? member.paymentStatus
+                  : "unpaid",
+                note: member.note || "",
+              };
+
+              // Add to batch promises with enhanced error handling
+              batchPromises.push(
+                memberService
+                  .addOrUpdateMemberWithId(cleanMember)
+                  .then(() => {
+                    importedMembers++;
+                    console.log(`تم استيراد العضو: ${cleanMember.name}`);
+                  })
+                  .catch((error) => {
+                    console.error(
+                      `خطأ في استيراد العضو ${cleanMember.name}:`,
+                      error,
+                    );
+                    errors.push(
+                      `خطأ في استيراد العضو ${cleanMember.name}: ${error.message || error}`,
+                    );
+                  }),
+              );
+            } catch (error) {
+              console.error(`خطأ في معالجة العضو:`, error);
+              errors.push(`خطأ في معالجة العضو: ${error}`);
+            }
+          }
+
+          // Wait for current batch to complete before processing next batch
+          await Promise.allSettled(batchPromises);
+
+          // Small delay between batches to prevent overwhelming the database
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+
+        // Import payments with enhanced batch processing
         const paymentService = await import("@/services/paymentService");
 
-        for (let i = 0; i < payments.length; i++) {
-          try {
-            const payment = payments[i];
-            if (!payment || typeof payment !== "object") {
-              errors.push(`دفعة غير صحيحة في الفهرس ${i}`);
-              continue;
-            }
-
-            if (payment.amount === undefined || payment.amount === null) {
-              errors.push(`دفعة بدون مبلغ في الفهرس ${i}`);
-              continue;
-            }
-
-            const cleanPayment = {
-              id: payment.id || `imported_payment_${Date.now()}_${i}`,
-              memberId: payment.memberId || "unknown",
-              amount: Math.max(0, Number(payment.amount) || 0),
-              date: payment.date || new Date().toISOString(),
-              subscriptionType: payment.subscriptionType || "غير محدد",
-              paymentMethod: ["cash", "card", "transfer"].includes(
-                payment.paymentMethod,
-              )
-                ? payment.paymentMethod
-                : "cash",
-              status: ["completed", "pending", "cancelled"].includes(
-                payment.status,
-              )
-                ? payment.status
-                : "completed",
-              invoiceNumber: payment.invoiceNumber || `INV-${Date.now()}-${i}`,
-              notes: payment.notes || "",
-              receiptUrl: payment.receiptUrl || "",
-            };
-
-            // Use the new addOrUpdatePaymentWithId function
-            await paymentService.addOrUpdatePaymentWithId(cleanPayment);
-            importedPayments++;
-          } catch (error) {
-            errors.push(`خطأ في استيراد دفعة ${i}: ${error}`);
-          }
+        // Process payments in smaller batches
+        const paymentBatches = [];
+        for (let i = 0; i < payments.length; i += BATCH_SIZE) {
+          paymentBatches.push(payments.slice(i, i + BATCH_SIZE));
         }
 
-        // Import activities with comprehensive data cleaning
-        for (let i = 0; i < activities.length; i++) {
-          try {
-            const activity = activities[i];
-            if (
-              !activity ||
-              typeof activity !== "object" ||
-              !activity.memberId
-            ) {
-              continue; // Skip invalid activities silently
+        for (const batch of paymentBatches) {
+          const batchPromises = [];
+
+          for (let i = 0; i < batch.length; i++) {
+            try {
+              const payment = batch[i];
+              if (!payment || typeof payment !== "object") {
+                errors.push(`دفعة غير صحيحة في المجموعة`);
+                continue;
+              }
+
+              if (payment.amount === undefined || payment.amount === null) {
+                errors.push(`دفعة بدون مبلغ`);
+                continue;
+              }
+
+              const cleanPayment = {
+                id:
+                  payment.id ||
+                  `imported_payment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                memberId: payment.memberId || "unknown",
+                amount: Math.max(0, Number(payment.amount) || 0),
+                date: payment.date || new Date().toISOString(),
+                subscriptionType: payment.subscriptionType || "غير محدد",
+                paymentMethod: ["cash", "card", "transfer"].includes(
+                  payment.paymentMethod,
+                )
+                  ? payment.paymentMethod
+                  : "cash",
+                status: ["completed", "pending", "cancelled"].includes(
+                  payment.status,
+                )
+                  ? payment.status
+                  : "completed",
+                invoiceNumber:
+                  payment.invoiceNumber ||
+                  `INV-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+                notes: payment.notes || "",
+                receiptUrl: payment.receiptUrl || "",
+              };
+
+              // Add to batch promises with enhanced error handling
+              batchPromises.push(
+                paymentService
+                  .addOrUpdatePaymentWithId(cleanPayment)
+                  .then(() => {
+                    importedPayments++;
+                    console.log(`تم استيراد الدفعة: ${cleanPayment.amount} دج`);
+                  })
+                  .catch((error) => {
+                    console.error(
+                      `خطأ في استيراد الدفعة ${cleanPayment.amount}:`,
+                      error,
+                    );
+                    errors.push(
+                      `خطأ في استيراد دفعة ${cleanPayment.amount} دج: ${error.message || error}`,
+                    );
+                  }),
+              );
+            } catch (error) {
+              console.error(`خطأ في معالجة الدفعة:`, error);
+              errors.push(`خطأ في معالجة الدفعة: ${error}`);
             }
-
-            const cleanActivity = {
-              id: activity.id || `imported_activity_${Date.now()}_${i}`,
-              memberId: activity.memberId,
-              memberName: activity.memberName || "",
-              memberImage: activity.memberImage || "",
-              activityType: [
-                "check-in",
-                "membership-renewal",
-                "payment",
-                "other",
-              ].includes(activity.activityType)
-                ? activity.activityType
-                : "other",
-              timestamp: activity.timestamp || new Date().toISOString(),
-              details: activity.details || "",
-            };
-
-            // Use the member service to add activity
-            await memberService.addOrUpdateActivityWithId(cleanActivity);
-            importedActivities++;
-          } catch (error) {
-            // Skip failed activities silently
           }
+
+          // Wait for current batch to complete
+          await Promise.allSettled(batchPromises);
+
+          // Small delay between batches
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+
+        // Import activities with enhanced batch processing
+        const activityBatches = [];
+        for (let i = 0; i < activities.length; i += BATCH_SIZE) {
+          activityBatches.push(activities.slice(i, i + BATCH_SIZE));
+        }
+
+        for (const batch of activityBatches) {
+          const batchPromises = [];
+
+          for (let i = 0; i < batch.length; i++) {
+            try {
+              const activity = batch[i];
+              if (
+                !activity ||
+                typeof activity !== "object" ||
+                !activity.memberId
+              ) {
+                continue; // Skip invalid activities silently
+              }
+
+              const cleanActivity = {
+                id:
+                  activity.id ||
+                  `imported_activity_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                memberId: activity.memberId,
+                memberName: activity.memberName || "",
+                memberImage: activity.memberImage || "",
+                activityType: [
+                  "check-in",
+                  "membership-renewal",
+                  "payment",
+                  "other",
+                ].includes(activity.activityType)
+                  ? activity.activityType
+                  : "other",
+                timestamp: activity.timestamp || new Date().toISOString(),
+                details: activity.details || "",
+              };
+
+              // Add to batch promises
+              batchPromises.push(
+                memberService
+                  .addOrUpdateActivityWithId(cleanActivity)
+                  .then(() => {
+                    importedActivities++;
+                    console.log(
+                      `تم استيراد النشاط: ${cleanActivity.activityType}`,
+                    );
+                  })
+                  .catch((error) => {
+                    console.warn(`تم تجاهل نشاط غير صحيح:`, error);
+                  }),
+              );
+            } catch (error) {
+              // Skip failed activities silently
+              console.warn(`تم تجاهل نشاط غير صحيح:`, error);
+            }
+          }
+
+          // Wait for current batch to complete
+          await Promise.allSettled(batchPromises);
+
+          // Small delay between batches
+          await new Promise((resolve) => setTimeout(resolve, 50));
         }
 
         // Success feedback
@@ -532,19 +633,47 @@ const PaymentsPage = () => {
           console.warn("Import errors:", errors);
         }
 
-        // Refresh all data
-        setRefreshPaymentsList((prev) => prev + 1);
+        // Refresh all data immediately
         await fetchStatistics();
+        setRefreshPaymentsList((prev) => prev + 1);
 
         // Force refresh the payments list component
         if (paymentsListRef.current?.fetchPayments) {
           await paymentsListRef.current.fetchPayments();
         }
 
-        // Add a small delay to ensure all data is refreshed
+        // Force a final database sync before showing completion message
+        try {
+          const finalMemberService = await import("@/services/memberService");
+          const finalPaymentService = await import("@/services/paymentService");
+
+          // Force all databases to sync
+          await Promise.all([
+            finalMemberService.getAllMembers(),
+            finalPaymentService.getAllPayments(),
+            finalMemberService.getRecentActivities(1),
+          ]);
+
+          console.log(
+            `استيراد مكتمل: ${importedMembers} أعضاء، ${importedPayments} دفعات، ${importedActivities} أنشطة`,
+          );
+        } catch (syncError) {
+          console.warn("تحذير في المزامنة النهائية:", syncError);
+        }
+
+        // Show final success message with reload option
         setTimeout(() => {
-          window.location.reload();
-        }, 1000);
+          toast({
+            title: "🔄 تحديث البيانات",
+            description:
+              "تم تحديث البيانات بنجاح. سيتم إعادة تحميل الصفحة لضمان عرض جميع التغييرات.",
+          });
+
+          // Reload after showing the message
+          setTimeout(() => {
+            window.location.reload();
+          }, 3000);
+        }, 1500);
       } catch (error) {
         console.error("Import error:", error);
         playSound("error");

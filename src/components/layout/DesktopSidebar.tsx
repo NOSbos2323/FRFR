@@ -232,122 +232,179 @@ const DesktopSidebar = ({
       let importedActivities = 0;
       const errors = [];
 
-      // Import members
-      for (let i = 0; i < members.length; i++) {
-        try {
-          const member = members[i];
-          if (!member || !member.name) {
-            errors.push(`عضو غير صحيح في الفهرس ${i}`);
-            continue;
-          }
-
-          const cleanMember = {
-            id: member.id || `imported_member_${Date.now()}_${i}`,
-            name: String(member.name).trim(),
-            membershipStatus: ["active", "expired", "pending"].includes(
-              member.membershipStatus,
-            )
-              ? member.membershipStatus
-              : "pending",
-            lastAttendance:
-              member.lastAttendance || new Date().toISOString().split("T")[0],
-            imageUrl: member.imageUrl || "",
-            phoneNumber: member.phoneNumber || "",
-            email: member.email || "",
-            membershipType: member.membershipType || "",
-            membershipStartDate: member.membershipStartDate || "",
-            membershipEndDate: member.membershipEndDate || "",
-            subscriptionType: member.subscriptionType,
-            sessionsRemaining: Math.max(
-              0,
-              Number(member.sessionsRemaining) || 0,
-            ),
-            subscriptionPrice: Math.max(
-              0,
-              Number(member.subscriptionPrice) || 0,
-            ),
-            paymentStatus: ["paid", "unpaid", "partial"].includes(
-              member.paymentStatus,
-            )
-              ? member.paymentStatus
-              : "unpaid",
-            note: member.note || "",
-          };
-
-          await memberService.addOrUpdateMemberWithId(cleanMember);
-          importedMembers++;
-        } catch (error) {
-          errors.push(`خطأ في استيراد عضو ${i}: ${error}`);
-        }
+      // Import members with enhanced batch processing
+      const BATCH_SIZE = 5; // Smaller batches for desktop sidebar
+      const memberBatches = [];
+      for (let i = 0; i < members.length; i += BATCH_SIZE) {
+        memberBatches.push(members.slice(i, i + BATCH_SIZE));
       }
 
-      // Import payments
-      for (let i = 0; i < payments.length; i++) {
-        try {
-          const payment = payments[i];
-          if (!payment || payment.amount === undefined) {
-            errors.push(`دفعة غير صحيحة في الفهرس ${i}`);
-            continue;
+      for (const [batchIndex, batch] of memberBatches.entries()) {
+        console.log(
+          `معالجة مجموعة الأعضاء ${batchIndex + 1}/${memberBatches.length}`,
+        );
+
+        for (let i = 0; i < batch.length; i++) {
+          try {
+            const member = batch[i];
+            if (!member || !member.name) {
+              errors.push(`عضو غير صحيح في المجموعة ${batchIndex + 1}`);
+              continue;
+            }
+
+            const cleanMember = {
+              id:
+                member.id ||
+                `imported_member_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              name: String(member.name).trim(),
+              membershipStatus: ["active", "expired", "pending"].includes(
+                member.membershipStatus,
+              )
+                ? member.membershipStatus
+                : "pending",
+              lastAttendance:
+                member.lastAttendance || new Date().toISOString().split("T")[0],
+              imageUrl: member.imageUrl || "",
+              phoneNumber: member.phoneNumber || "",
+              email: member.email || "",
+              membershipType: member.membershipType || "",
+              membershipStartDate: member.membershipStartDate || "",
+              membershipEndDate: member.membershipEndDate || "",
+              subscriptionType: member.subscriptionType,
+              sessionsRemaining: Math.max(
+                0,
+                Number(member.sessionsRemaining) || 0,
+              ),
+              subscriptionPrice: Math.max(
+                0,
+                Number(member.subscriptionPrice) || 0,
+              ),
+              paymentStatus: ["paid", "unpaid", "partial"].includes(
+                member.paymentStatus,
+              )
+                ? member.paymentStatus
+                : "unpaid",
+              note: member.note || "",
+            };
+
+            await memberService.addOrUpdateMemberWithId(cleanMember);
+            importedMembers++;
+            console.log(`تم استيراد العضو: ${cleanMember.name}`);
+          } catch (error) {
+            console.error(`خطأ في استيراد عضو:`, error);
+            errors.push(`خطأ في استيراد عضو: ${error}`);
           }
-
-          const cleanPayment = {
-            id: payment.id || `imported_payment_${Date.now()}_${i}`,
-            memberId: payment.memberId || "unknown",
-            amount: Math.max(0, Number(payment.amount) || 0),
-            date: payment.date || new Date().toISOString(),
-            subscriptionType: payment.subscriptionType || "غير محدد",
-            paymentMethod: ["cash", "card", "transfer"].includes(
-              payment.paymentMethod,
-            )
-              ? payment.paymentMethod
-              : "cash",
-            status: ["completed", "pending", "cancelled"].includes(
-              payment.status,
-            )
-              ? payment.status
-              : "completed",
-            invoiceNumber: payment.invoiceNumber || `INV-${Date.now()}-${i}`,
-            notes: payment.notes || "",
-            receiptUrl: payment.receiptUrl || "",
-          };
-
-          await paymentService.addOrUpdatePaymentWithId(cleanPayment);
-          importedPayments++;
-        } catch (error) {
-          errors.push(`خطأ في استيراد دفعة ${i}: ${error}`);
         }
+
+        // Small delay between batches
+        await new Promise((resolve) => setTimeout(resolve, 200));
       }
 
-      // Import activities
-      for (let i = 0; i < activities.length; i++) {
-        try {
-          const activity = activities[i];
-          if (!activity || !activity.memberId) {
-            continue;
+      // Import payments with enhanced batch processing
+      const paymentBatches = [];
+      for (let i = 0; i < payments.length; i += BATCH_SIZE) {
+        paymentBatches.push(payments.slice(i, i + BATCH_SIZE));
+      }
+
+      for (const [batchIndex, batch] of paymentBatches.entries()) {
+        console.log(
+          `معالجة مجموعة الدفعات ${batchIndex + 1}/${paymentBatches.length}`,
+        );
+
+        for (let i = 0; i < batch.length; i++) {
+          try {
+            const payment = batch[i];
+            if (!payment || payment.amount === undefined) {
+              errors.push(`دفعة غير صحيحة في المجموعة ${batchIndex + 1}`);
+              continue;
+            }
+
+            const cleanPayment = {
+              id:
+                payment.id ||
+                `imported_payment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              memberId: payment.memberId || "unknown",
+              amount: Math.max(0, Number(payment.amount) || 0),
+              date: payment.date || new Date().toISOString(),
+              subscriptionType: payment.subscriptionType || "غير محدد",
+              paymentMethod: ["cash", "card", "transfer"].includes(
+                payment.paymentMethod,
+              )
+                ? payment.paymentMethod
+                : "cash",
+              status: ["completed", "pending", "cancelled"].includes(
+                payment.status,
+              )
+                ? payment.status
+                : "completed",
+              invoiceNumber:
+                payment.invoiceNumber ||
+                `INV-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+              notes: payment.notes || "",
+              receiptUrl: payment.receiptUrl || "",
+            };
+
+            await paymentService.addOrUpdatePaymentWithId(cleanPayment);
+            importedPayments++;
+            console.log(`تم استيراد الدفعة: ${cleanPayment.amount} دج`);
+          } catch (error) {
+            console.error(`خطأ في استيراد دفعة:`, error);
+            errors.push(`خطأ في استيراد دفعة: ${error}`);
           }
-
-          const cleanActivity = {
-            id: activity.id || `imported_activity_${Date.now()}_${i}`,
-            memberId: activity.memberId,
-            memberName: activity.memberName || "",
-            memberImage: activity.memberImage || "",
-            activityType: [
-              "check-in",
-              "membership-renewal",
-              "payment",
-              "other",
-            ].includes(activity.activityType)
-              ? activity.activityType
-              : "other",
-            timestamp: activity.timestamp || new Date().toISOString(),
-            details: activity.details || "",
-          };
-
-          await memberService.addOrUpdateActivityWithId(cleanActivity);
-          importedActivities++;
-        } catch (error) {
-          // Skip failed activities silently
         }
+
+        // Small delay between batches
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+
+      // Import activities with enhanced batch processing
+      const activityBatches = [];
+      for (let i = 0; i < activities.length; i += BATCH_SIZE) {
+        activityBatches.push(activities.slice(i, i + BATCH_SIZE));
+      }
+
+      for (const [batchIndex, batch] of activityBatches.entries()) {
+        console.log(
+          `معالجة مجموعة الأنشطة ${batchIndex + 1}/${activityBatches.length}`,
+        );
+
+        for (let i = 0; i < batch.length; i++) {
+          try {
+            const activity = batch[i];
+            if (!activity || !activity.memberId) {
+              continue;
+            }
+
+            const cleanActivity = {
+              id:
+                activity.id ||
+                `imported_activity_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              memberId: activity.memberId,
+              memberName: activity.memberName || "",
+              memberImage: activity.memberImage || "",
+              activityType: [
+                "check-in",
+                "membership-renewal",
+                "payment",
+                "other",
+              ].includes(activity.activityType)
+                ? activity.activityType
+                : "other",
+              timestamp: activity.timestamp || new Date().toISOString(),
+              details: activity.details || "",
+            };
+
+            await memberService.addOrUpdateActivityWithId(cleanActivity);
+            importedActivities++;
+            console.log(`تم استيراد النشاط: ${cleanActivity.activityType}`);
+          } catch (error) {
+            // Skip failed activities silently
+            console.warn(`تم تجاهل نشاط غير صحيح:`, error);
+          }
+        }
+
+        // Small delay between batches
+        await new Promise((resolve) => setTimeout(resolve, 150));
       }
 
       // Import settings
@@ -376,7 +433,33 @@ const DesktopSidebar = ({
         }, 2000);
       }
 
-      setTimeout(() => window.location.reload(), 3000);
+      // Force final database sync and verification
+      try {
+        console.log("بدء المزامنة النهائية للبيانات...");
+        await Promise.all([
+          memberService.getAllMembers(),
+          paymentService.getAllPayments(),
+          memberService.getRecentActivities(1),
+        ]);
+        console.log(
+          `استيراد مكتمل: ${importedMembers} أعضاء، ${importedPayments} دفعات، ${importedActivities} أنشطة`,
+        );
+      } catch (syncError) {
+        console.warn("تحذير في المزامنة النهائية:", syncError);
+      }
+
+      // Show reload message and then reload
+      setTimeout(() => {
+        toast({
+          title: "🔄 تحديث البيانات",
+          description:
+            "سيتم إعادة تحميل الصفحة لضمان عرض جميع التغييرات المستوردة.",
+        });
+
+        setTimeout(() => {
+          window.location.reload();
+        }, 3000);
+      }, 1500);
     } catch (error) {
       console.error("Error importing data:", error);
       toast({

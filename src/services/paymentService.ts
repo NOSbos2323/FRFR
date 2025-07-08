@@ -173,15 +173,41 @@ export const updatePayment = async (payment: Payment): Promise<Payment> => {
 export const addOrUpdatePaymentWithId = async (
   payment: Payment,
 ): Promise<Payment> => {
-  const updatedPayment = {
-    ...payment,
-    date: payment.date || new Date().toISOString(),
-    invoiceNumber: payment.invoiceNumber || `INV-${Date.now()}`,
-    status: payment.status || "completed",
-  };
+  try {
+    const updatedPayment = {
+      ...payment,
+      amount: Number(payment.amount) || 0,
+      date: payment.date || new Date().toISOString(),
+      invoiceNumber: payment.invoiceNumber || `INV-${Date.now()}`,
+      status: payment.status || "completed",
+      paymentMethod: payment.paymentMethod || "cash",
+      subscriptionType: payment.subscriptionType || "غير محدد",
+      notes: payment.notes || "",
+    };
 
-  await paymentsDB.setItem(payment.id, updatedPayment);
-  return updatedPayment;
+    // Use transaction-like approach for payments
+    await paymentsDB.setItem(payment.id, updatedPayment);
+
+    // Verify the data was written correctly
+    const savedPayment = await paymentsDB.getItem(payment.id);
+    if (!savedPayment) {
+      throw new Error(`فشل في حفظ الدفعة ${payment.id}`);
+    }
+
+    // Force database sync and wait for completion
+    await paymentsDB.ready();
+
+    // Additional verification after sync
+    const verifiedPayment = await paymentsDB.getItem(payment.id);
+    if (!verifiedPayment) {
+      throw new Error(`فشل في التحقق من حفظ الدفعة ${payment.id}`);
+    }
+
+    return updatedPayment;
+  } catch (error) {
+    console.error("Error adding/updating payment:", error);
+    throw error;
+  }
 };
 
 // Add a session payment for non-subscribed members

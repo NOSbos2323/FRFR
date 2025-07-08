@@ -99,8 +99,42 @@ export const addMember = async (
 export const addOrUpdateMemberWithId = async (
   member: Member,
 ): Promise<Member> => {
-  await membersDB.setItem(member.id, member);
-  return member;
+  try {
+    // Ensure the member data is valid before saving
+    const validMember = {
+      ...member,
+      name: member.name?.trim() || "عضو جديد",
+      membershipStatus: member.membershipStatus || "pending",
+      lastAttendance:
+        member.lastAttendance || new Date().toISOString().split("T")[0],
+      paymentStatus: member.paymentStatus || "unpaid",
+      sessionsRemaining: Number(member.sessionsRemaining) || 0,
+      subscriptionPrice: Number(member.subscriptionPrice) || 0,
+    };
+
+    // Use a transaction-like approach for better reliability
+    await membersDB.setItem(member.id, validMember);
+
+    // Verify the data was written correctly
+    const savedMember = await membersDB.getItem(member.id);
+    if (!savedMember) {
+      throw new Error(`فشل في حفظ العضو ${member.name}`);
+    }
+
+    // Force database sync and wait for completion
+    await membersDB.ready();
+
+    // Additional verification after sync
+    const verifiedMember = await membersDB.getItem(member.id);
+    if (!verifiedMember) {
+      throw new Error(`فشل في التحقق من حفظ العضو ${member.name}`);
+    }
+
+    return validMember;
+  } catch (error) {
+    console.error("Error adding/updating member:", error);
+    throw error;
+  }
 };
 
 // Update a member with validation
@@ -307,12 +341,33 @@ export const addActivity = async (
 export const addOrUpdateActivityWithId = async (
   activity: MemberActivity,
 ): Promise<MemberActivity> => {
-  const activityWithId = {
-    ...activity,
-    id: activity.id || Date.now().toString(),
-  };
-  await activitiesDB.setItem(activityWithId.id, activityWithId);
-  return activityWithId;
+  try {
+    const activityWithId = {
+      ...activity,
+      id: activity.id || Date.now().toString(),
+      timestamp: activity.timestamp || new Date().toISOString(),
+      details: activity.details || "",
+      activityType: activity.activityType || "other",
+      memberName: activity.memberName || "",
+    };
+
+    // Use transaction-like approach for activities
+    await activitiesDB.setItem(activityWithId.id, activityWithId);
+
+    // Verify the data was written
+    const savedActivity = await activitiesDB.getItem(activityWithId.id);
+    if (!savedActivity) {
+      throw new Error(`فشل في حفظ النشاط ${activityWithId.id}`);
+    }
+
+    // Force database sync
+    await activitiesDB.ready();
+
+    return activityWithId;
+  } catch (error) {
+    console.error("Error adding/updating activity:", error);
+    throw error;
+  }
 };
 
 // Get recent activities with error handling
