@@ -29,6 +29,8 @@ const PendingPaymentsPage = ({ onBack }: PendingPaymentsPageProps) => {
   const [filteredMembers, setFilteredMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState<string>("all");
+  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
+  const [lastScrollY, setLastScrollY] = useState(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Fetch all unpaid members
@@ -128,43 +130,100 @@ const PendingPaymentsPage = ({ onBack }: PendingPaymentsPageProps) => {
     applyPeriodFilter();
   }, [allUnpaidMembers, selectedPeriod]);
 
-  // Handle scroll to hide keyboard on mobile
-  const handleScroll = () => {
+  // Enhanced scroll handler to hide keyboard on mobile and manage header visibility
+  const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    const currentScrollY = event.currentTarget.scrollTop;
+
+    // Header visibility logic
+    if (currentScrollY > lastScrollY && currentScrollY > 100) {
+      // Scrolling down and past threshold - hide header
+      setIsHeaderVisible(false);
+    } else if (currentScrollY < lastScrollY || currentScrollY <= 50) {
+      // Scrolling up or near top - show header
+      setIsHeaderVisible(true);
+    }
+
+    setLastScrollY(currentScrollY);
+
     // Force blur on any active input to hide keyboard
+    const activeElement = document.activeElement as HTMLElement;
     if (
-      document.activeElement &&
-      document.activeElement instanceof HTMLElement
+      activeElement &&
+      activeElement.blur &&
+      activeElement.tagName !== "BODY"
     ) {
-      document.activeElement.blur();
+      activeElement.blur();
+    }
+
+    // Additional mobile keyboard hiding techniques
+    if (window.innerHeight < window.outerHeight) {
+      // Keyboard might be open, try to close it
+      window.scrollTo(0, 1);
+      setTimeout(() => window.scrollTo(0, 0), 0);
     }
   };
 
-  // Add scroll event listener for mobile keyboard hiding
+  // Enhanced scroll and touch event listeners for mobile
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current;
+
+    // Prevent body scroll when scrolling inside container
+    const preventBodyScroll = (e: TouchEvent) => {
+      if (scrollContainer && scrollContainer.contains(e.target as Node)) {
+        e.stopPropagation();
+      }
+    };
+
+    // Add global touch handlers
+    const handleGlobalTouchStart = () => {
+      const activeElement = document.activeElement as HTMLElement;
+      if (
+        activeElement &&
+        activeElement.blur &&
+        activeElement.tagName !== "BODY"
+      ) {
+        activeElement.blur();
+      }
+    };
+
     if (scrollContainer) {
       scrollContainer.addEventListener("scroll", handleScroll, {
         passive: true,
       });
+      document.addEventListener("touchstart", preventBodyScroll, {
+        passive: false,
+      });
+      document.addEventListener("touchstart", handleGlobalTouchStart, {
+        passive: true,
+      });
+
       return () => {
         scrollContainer.removeEventListener("scroll", handleScroll);
+        document.removeEventListener("touchstart", preventBodyScroll);
+        document.removeEventListener("touchstart", handleGlobalTouchStart);
       };
     }
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white flex flex-col">
+    <div className="h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white flex flex-col overflow-hidden">
       {/* Mobile Navigation */}
       <div className="lg:hidden flex-shrink-0">
         <TopMobileNavigation activeItem="payments" setActiveItem={() => {}} />
       </div>
 
-      {/* Main Container - Flexible height */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="container mx-auto px-3 sm:px-4 pt-4 pb-4 lg:pt-6 lg:pb-6 flex-1 flex flex-col">
-          <div className="bg-gradient-to-br from-bluegray-800/80 to-bluegray-900/80 backdrop-blur-xl border border-bluegray-600/50 shadow-2xl p-4 sm:p-6 lg:p-8 xl:p-10 rounded-2xl w-full text-white relative hover:shadow-3xl transition-all duration-500 flex-1 flex flex-col overflow-hidden">
-            {/* Header Section - Fixed */}
-            <div className="flex-shrink-0 mb-4 sm:mb-6">
+      {/* Main Container - Fixed height with proper overflow */}
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 flex flex-col min-h-0 px-2 sm:px-4 pt-2 pb-2">
+          <div className="bg-gradient-to-br from-slate-800/90 to-slate-900/90 backdrop-blur-xl border border-slate-600/50 shadow-2xl rounded-xl w-full text-white flex-1 flex flex-col min-h-0 overflow-hidden">
+            {/* Header Section - Animated Hide/Show */}
+            <div
+              className={`transition-all duration-300 ease-in-out overflow-hidden border-b border-slate-700/50 ${
+                isHeaderVisible
+                  ? "max-h-screen opacity-100 p-3 sm:p-4"
+                  : "max-h-0 opacity-0 p-0"
+              }`}
+            >
               {/* Title */}
               <div className="text-center mb-4">
                 <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold bg-gradient-to-r from-red-400 via-orange-400 to-yellow-400 bg-clip-text text-transparent">
@@ -337,20 +396,29 @@ const PendingPaymentsPage = ({ onBack }: PendingPaymentsPageProps) => {
             {/* Scrollable Content Area - Flexible */}
             <div
               ref={scrollContainerRef}
-              className="flex-1 overflow-y-auto smooth-scroll touch-pan-y overscroll-contain scrollbar-hide"
+              className="flex-1 overflow-y-auto scrollbar-hide"
               style={{
                 WebkitOverflowScrolling: "touch",
-                minHeight: 0, // Important for flex child to shrink
-                touchAction: "pan-y", // Allow only vertical scrolling
-                overscrollBehavior: "contain", // Prevent scroll chaining
+                minHeight: 0,
+                touchAction: "pan-y",
+                overscrollBehavior: "contain",
+                height: "100%",
               }}
+              onScroll={handleScroll}
               onTouchStart={() => {
-                // Hide keyboard when user starts scrolling
-                if (
-                  document.activeElement &&
-                  document.activeElement instanceof HTMLElement
-                ) {
-                  document.activeElement.blur();
+                // Force blur on any focused element
+                const activeElement = document.activeElement as HTMLElement;
+                if (activeElement && activeElement.blur) {
+                  activeElement.blur();
+                }
+                // Also hide any virtual keyboards
+                window.scrollTo(0, 0);
+              }}
+              onTouchMove={() => {
+                // Additional keyboard hiding on touch move
+                const activeElement = document.activeElement as HTMLElement;
+                if (activeElement && activeElement.blur) {
+                  activeElement.blur();
                 }
               }}
             >
@@ -381,7 +449,7 @@ const PendingPaymentsPage = ({ onBack }: PendingPaymentsPageProps) => {
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 sm:gap-3 lg:gap-4 xl:gap-6 pb-24 lg:pb-4 px-1 sm:px-0">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-6 p-3 sm:p-4 pb-20 lg:pb-6">
                   {filteredMembers.map((member, index) => (
                     <motion.div
                       key={member.id}
@@ -402,16 +470,6 @@ const PendingPaymentsPage = ({ onBack }: PendingPaymentsPageProps) => {
                                 {member.name.substring(0, 2)}
                               </AvatarFallback>
                             </Avatar>
-                            <div className="flex flex-col items-end gap-0.5">
-                              <Badge className="bg-gradient-to-r from-red-500/90 to-orange-500/90 text-white text-xs px-1 py-0.5">
-                                <AlertTriangle className="h-2 w-2 mr-0.5" />
-                                معلق
-                              </Badge>
-                              <Badge className="bg-gradient-to-r from-yellow-500/20 to-orange-500/20 text-yellow-300 border border-yellow-500/30 text-xs px-1 py-0.5">
-                                <Clock className="h-2 w-2 mr-0.5" />
-                                متابعة
-                              </Badge>
-                            </div>
                           </div>
 
                           <h3 className="text-xs sm:text-sm lg:text-base font-semibold mb-1 text-white truncate">
@@ -499,7 +557,7 @@ const PendingPaymentsPage = ({ onBack }: PendingPaymentsPageProps) => {
       </div>
 
       {/* Mobile Bottom Navigation - Fixed */}
-      <div className="lg:hidden flex-shrink-0">
+      <div className="lg:hidden flex-shrink-0 bg-slate-900/95 backdrop-blur-xl border-t border-slate-700/50">
         <MobileNavigationComponent
           activeItem="payments"
           setActiveItem={(item) => {
