@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Phone,
   Calendar,
@@ -29,6 +29,7 @@ const PendingPaymentsPage = ({ onBack }: PendingPaymentsPageProps) => {
   const [filteredMembers, setFilteredMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState<string>("all");
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Fetch all unpaid members
   useEffect(() => {
@@ -126,6 +127,30 @@ const PendingPaymentsPage = ({ onBack }: PendingPaymentsPageProps) => {
 
     applyPeriodFilter();
   }, [allUnpaidMembers, selectedPeriod]);
+
+  // Handle scroll to hide keyboard on mobile
+  const handleScroll = () => {
+    // Force blur on any active input to hide keyboard
+    if (
+      document.activeElement &&
+      document.activeElement instanceof HTMLElement
+    ) {
+      document.activeElement.blur();
+    }
+  };
+
+  // Add scroll event listener for mobile keyboard hiding
+  useEffect(() => {
+    const scrollContainer = scrollContainerRef.current;
+    if (scrollContainer) {
+      scrollContainer.addEventListener("scroll", handleScroll, {
+        passive: true,
+      });
+      return () => {
+        scrollContainer.removeEventListener("scroll", handleScroll);
+      };
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white flex flex-col">
@@ -311,10 +336,22 @@ const PendingPaymentsPage = ({ onBack }: PendingPaymentsPageProps) => {
 
             {/* Scrollable Content Area - Flexible */}
             <div
+              ref={scrollContainerRef}
               className="flex-1 overflow-y-auto smooth-scroll touch-pan-y overscroll-contain scrollbar-hide"
               style={{
                 WebkitOverflowScrolling: "touch",
                 minHeight: 0, // Important for flex child to shrink
+                touchAction: "pan-y", // Allow only vertical scrolling
+                overscrollBehavior: "contain", // Prevent scroll chaining
+              }}
+              onTouchStart={() => {
+                // Hide keyboard when user starts scrolling
+                if (
+                  document.activeElement &&
+                  document.activeElement instanceof HTMLElement
+                ) {
+                  document.activeElement.blur();
+                }
               }}
             >
               {loading ? (
@@ -344,7 +381,7 @@ const PendingPaymentsPage = ({ onBack }: PendingPaymentsPageProps) => {
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-6 xl:gap-8 pb-20 lg:pb-4 px-1 sm:px-0">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 sm:gap-3 lg:gap-4 xl:gap-6 pb-24 lg:pb-4 px-1 sm:px-0">
                   {filteredMembers.map((member, index) => (
                     <motion.div
                       key={member.id}
@@ -353,60 +390,58 @@ const PendingPaymentsPage = ({ onBack }: PendingPaymentsPageProps) => {
                       transition={{ duration: 0.3, delay: index * 0.05 }}
                       whileHover={{ scale: 1.02 }}
                     >
-                      <Card className="overflow-hidden backdrop-blur-xl bg-gradient-to-br from-bluegray-700/60 to-bluegray-800/60 border border-red-500/50 shadow-xl hover:shadow-2xl transition-all duration-300 w-full hover:scale-[1.02] hover:border-red-400/60">
-                        <CardContent className="p-3 sm:p-4 lg:p-6">
-                          <div className="flex items-center justify-between mb-2 sm:mb-3 lg:mb-4">
-                            <Avatar className="h-10 w-10 sm:h-12 sm:w-12 lg:h-16 lg:w-16 border-2 border-red-400/50 shadow-md">
+                      <Card className="overflow-hidden backdrop-blur-xl bg-gradient-to-br from-bluegray-700/60 to-bluegray-800/60 border border-red-500/50 shadow-lg hover:shadow-xl transition-all duration-200 w-full hover:border-red-400/60">
+                        <CardContent className="p-2 sm:p-3 lg:p-4">
+                          <div className="flex items-center justify-between mb-1.5 sm:mb-2 lg:mb-3">
+                            <Avatar className="h-8 w-8 sm:h-10 sm:w-10 lg:h-12 lg:w-12 border-2 border-red-400/50 shadow-md">
                               <AvatarImage
                                 src={member.imageUrl}
                                 alt={member.name}
                               />
-                              <AvatarFallback className="bg-gradient-to-br from-red-500 to-orange-600 text-white text-sm font-semibold">
+                              <AvatarFallback className="bg-gradient-to-br from-red-500 to-orange-600 text-white text-xs sm:text-sm font-semibold">
                                 {member.name.substring(0, 2)}
                               </AvatarFallback>
                             </Avatar>
-                            <div className="flex flex-col items-end gap-1">
-                              <Badge className="bg-gradient-to-r from-red-500/90 to-orange-500/90 text-white text-xs px-1.5 py-0.5">
-                                <AlertTriangle className="h-2.5 w-2.5 mr-1" />
+                            <div className="flex flex-col items-end gap-0.5">
+                              <Badge className="bg-gradient-to-r from-red-500/90 to-orange-500/90 text-white text-xs px-1 py-0.5">
+                                <AlertTriangle className="h-2 w-2 mr-0.5" />
                                 معلق
                               </Badge>
-                              <Badge className="bg-gradient-to-r from-yellow-500/20 to-orange-500/20 text-yellow-300 border border-yellow-500/30 text-xs px-1.5 py-0.5">
-                                <Clock className="h-2.5 w-2.5 mr-1" />
-                                يحتاج متابعة
+                              <Badge className="bg-gradient-to-r from-yellow-500/20 to-orange-500/20 text-yellow-300 border border-yellow-500/30 text-xs px-1 py-0.5">
+                                <Clock className="h-2 w-2 mr-0.5" />
+                                متابعة
                               </Badge>
                             </div>
                           </div>
 
-                          <h3 className="text-sm sm:text-base lg:text-lg font-semibold mb-1 sm:mb-2 text-white truncate">
+                          <h3 className="text-xs sm:text-sm lg:text-base font-semibold mb-1 text-white truncate">
                             {member.name}
                           </h3>
 
                           {member.phoneNumber && (
-                            <div className="flex items-center gap-1.5 text-blue-300 mb-2">
-                              <Phone className="h-3 w-3 sm:h-4 sm:w-4" />
-                              <span className="text-xs sm:text-sm font-medium">
+                            <div className="flex items-center gap-1 text-blue-300 mb-1.5">
+                              <Phone className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                              <span className="text-xs font-medium">
                                 {member.phoneNumber}
                               </span>
                             </div>
                           )}
 
-                          <div className="space-y-1.5 sm:space-y-2 mt-2 sm:mt-3">
+                          <div className="space-y-1 sm:space-y-1.5 mt-1.5 sm:mt-2">
                             {/* Sessions Remaining - Prominent Display */}
                             {member.subscriptionType &&
                               member.sessionsRemaining !== undefined && (
-                                <div className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-lg p-2 sm:p-3 border border-blue-400/30">
+                                <div className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-md p-1.5 sm:p-2 border border-blue-400/30">
                                   <div className="flex items-center justify-between">
-                                    <span className="text-blue-300 text-xs sm:text-sm font-medium">
-                                      الحصص المتبقية:
+                                    <span className="text-blue-300 text-xs font-medium">
+                                      الحصص:
                                     </span>
-                                    <Badge className="bg-gradient-to-r from-blue-500 to-purple-600 text-white text-xs sm:text-sm px-2 sm:px-3 py-0.5 sm:py-1 font-bold">
-                                      {formatNumber(member.sessionsRemaining)}{" "}
-                                      حصة
+                                    <Badge className="bg-gradient-to-r from-blue-500 to-purple-600 text-white text-xs px-1.5 py-0.5 font-bold">
+                                      {formatNumber(member.sessionsRemaining)}
                                     </Badge>
                                   </div>
-                                  <div className="text-xs text-gray-400 mt-1">
-                                    من أصل{" "}
-                                    {member.subscriptionType.split(" ")[0]} حصة
+                                  <div className="text-xs text-gray-400 mt-0.5">
+                                    من {member.subscriptionType.split(" ")[0]}
                                   </div>
                                 </div>
                               )}
@@ -414,8 +449,7 @@ const PendingPaymentsPage = ({ onBack }: PendingPaymentsPageProps) => {
                             {/* Subscription Price */}
                             {member.subscriptionPrice && (
                               <div className="text-xs text-gray-300">
-                                <span className="text-green-400 font-semibold">
-                                  ثمن الاشتراك:{" "}
+                                <span className="text-green-400 font-medium">
                                   {formatNumber(member.subscriptionPrice)} دج
                                 </span>
                               </div>
@@ -423,23 +457,22 @@ const PendingPaymentsPage = ({ onBack }: PendingPaymentsPageProps) => {
 
                             {/* Subscription Type */}
                             {member.subscriptionType && (
-                              <Badge className="bg-gradient-to-r from-purple-500 to-pink-600 text-white text-xs px-1.5 py-0.5">
+                              <Badge className="bg-gradient-to-r from-purple-500 to-pink-600 text-white text-xs px-1 py-0.5">
                                 {member.subscriptionType}
                               </Badge>
                             )}
 
                             {/* Membership Start Date */}
                             {member.membershipStartDate && (
-                              <div className="text-xs text-gray-300">
-                                تاريخ الاشتراك:{" "}
+                              <div className="text-xs text-gray-400">
                                 {formatDate(member.membershipStartDate)}
                               </div>
                             )}
 
                             {/* Payment Status */}
-                            <div className="mt-1.5">
+                            <div className="mt-1">
                               <Badge
-                                className={`text-xs px-1.5 py-0.5 ${
+                                className={`text-xs px-1 py-0.5 ${
                                   member.paymentStatus === "unpaid"
                                     ? "bg-gradient-to-r from-red-500 to-red-600 text-white"
                                     : member.paymentStatus === "partial"
@@ -449,8 +482,7 @@ const PendingPaymentsPage = ({ onBack }: PendingPaymentsPageProps) => {
                               >
                                 {member.paymentStatus === "unpaid" &&
                                   "غير مدفوع"}
-                                {member.paymentStatus === "partial" &&
-                                  "مدفوع جزئياً"}
+                                {member.paymentStatus === "partial" && "جزئي"}
                                 {member.paymentStatus === "paid" && "مدفوع"}
                               </Badge>
                             </div>
